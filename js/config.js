@@ -19,7 +19,7 @@ const CONFIG = {
         center: [46.227638, 2.213749], // Centre exact de la France métropolitaine
         zoom: 6,
         maxZoom: 19, // Augmentation du zoom maximum
-        minZoom: 5,
+        minZoom: 2,  // Réduction du zoom minimum pour permettre de dézoomer davantage
         tileLayer: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     },

@@ -78,6 +78,12 @@ class FestivalsMap {
         // Les coordonnées dans l'API sont inversées (longitude, latitude)
         const latLng = [coords[1], coords[0]];
         
+        // Vérification que les coordonnées sont dans une plage raisonnable pour la France
+        if (!this.isValidFrenchCoordinate(latLng[0], latLng[1])) {
+            console.warn('Festival avec coordonnées hors de France:', festival);
+            return null;
+        }
+        
         // Création de l'icône
         const icon = L.icon(this.config.markers.defaultIcon);
         
@@ -97,6 +103,22 @@ class FestivalsMap {
         });
         
         return marker;
+    }
+
+    /**
+     * Vérifie si les coordonnées sont dans une plage raisonnable pour la France métropolitaine
+     * @param {Number} lat - Latitude
+     * @param {Number} lng - Longitude
+     * @returns {Boolean} - true si les coordonnées sont valides
+     */
+    isValidFrenchCoordinate(lat, lng) {
+        // Limites approximatives de la France métropolitaine
+        const minLat = 41.0;
+        const maxLat = 51.5;
+        const minLng = -5.5;
+        const maxLng = 10.0;
+        
+        return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
     }
 
     /**
@@ -157,13 +179,34 @@ class FestivalsMap {
         this.markerClusterGroup.addLayers(markers);
         this.markers = markers;
         
-        // Ajustement de la vue pour voir tous les marqueurs
+        // Ajustement de la vue pour voir tous les marqueurs, mais seulement si on a des marqueurs valides
         if (markers.length > 0) {
-            const group = L.featureGroup(markers);
-            this.map.fitBounds(group.getBounds(), {
-                padding: [50, 50],
-                maxZoom: 10 // Limitation du zoom automatique pour éviter un zoom trop important
-            });
+            try {
+                // Création d'un groupe de marqueurs pour calculer les limites
+                const group = L.featureGroup(markers);
+                const bounds = group.getBounds();
+                
+                // Vérification que les limites sont raisonnables pour la France
+                const franceBounds = L.latLngBounds(
+                    L.latLng(41.0, -5.5),  // Sud-Ouest de la France
+                    L.latLng(51.5, 10.0)   // Nord-Est de la France
+                );
+                
+                // Si les limites sont trop grandes ou hors de France, on utilise les limites de la France
+                if (!franceBounds.contains(bounds) || bounds.getSouthWest().distanceTo(bounds.getNorthEast()) > 1500000) {
+                    console.warn('Limites des marqueurs hors de France ou trop grandes, utilisation des limites par défaut');
+                    this.map.setView(this.config.map.center, this.config.map.zoom);
+                } else {
+                    // Sinon on utilise les limites des marqueurs
+                    this.map.fitBounds(bounds, {
+                        padding: [50, 50],
+                        maxZoom: 10 // Limitation du zoom automatique pour éviter un zoom trop important
+                    });
+                }
+            } catch (error) {
+                console.error('Erreur lors de l\'ajustement de la vue:', error);
+                this.map.setView(this.config.map.center, this.config.map.zoom);
+            }
         } else {
             // Si aucun marqueur, on revient à la vue par défaut de la France
             this.map.setView(this.config.map.center, this.config.map.zoom);
@@ -199,12 +242,18 @@ class FestivalsMap {
         
         if (festival && festival.geometry && festival.geometry.coordinates) {
             const coords = festival.geometry.coordinates;
-            this.map.setView([coords[1], coords[0]], 13);
-            
-            // Recherche du marqueur correspondant
-            const marker = this.markers.find(m => m.festivalData.recordid === festivalId);
-            if (marker) {
-                marker.openPopup();
+            // Vérification que les coordonnées sont dans une plage raisonnable pour la France
+            if (this.isValidFrenchCoordinate(coords[1], coords[0])) {
+                this.map.setView([coords[1], coords[0]], 13);
+                
+                // Recherche du marqueur correspondant
+                const marker = this.markers.find(m => m.festivalData.recordid === festivalId);
+                if (marker) {
+                    marker.openPopup();
+                }
+            } else {
+                console.warn('Tentative de centrer sur un festival avec des coordonnées hors de France');
+                this.map.setView(this.config.map.center, this.config.map.zoom);
             }
         }
     }

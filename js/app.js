@@ -21,20 +21,49 @@ document.addEventListener('DOMContentLoaded', () => {
     const festivalDetails = document.getElementById('festival-details');
     const festivalDetailsContent = document.getElementById('festival-details-content');
     const closeDetailsButton = document.getElementById('close-details');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const loadingCount = document.getElementById('loading-count');
     
     // Initialisation de la carte
     map.initMap('map');
     
+    // Fonction pour afficher l'indicateur de chargement
+    function showLoading(message = 'Chargement des festivals en cours...') {
+        loadingIndicator.style.display = 'flex';
+        document.querySelector('.loading-text').textContent = message;
+        loadingCount.textContent = '';
+    }
+    
+    // Fonction pour masquer l'indicateur de chargement
+    function hideLoading() {
+        loadingIndicator.style.display = 'none';
+    }
+    
+    // Fonction pour mettre à jour le compteur de chargement
+    function updateLoadingCount(count, total) {
+        loadingCount.textContent = `${count} sur ${total} festivals chargés`;
+    }
+    
     // Fonction pour charger les festivals
     async function loadFestivals() {
         try {
-            // Affichage d'un message de chargement
+            // Affichage de l'indicateur de chargement
+            showLoading();
+            
+            // Affichage d'un message de chargement dans la liste
             festivalsContainer.innerHTML = '<p>Chargement des festivals...</p>';
             
             // Récupération des festivals depuis l'API
-            const data = await api.getFestivals({ rows: 1000 });
+            const startTime = Date.now();
+            const data = await api.getFestivals({ rows: 8000 });
+            const loadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+            
             allFestivals = data.records;
             filteredFestivals = allFestivals;
+            
+            // Mise à jour du message de chargement
+            updateLoadingCount(allFestivals.length, allFestivals.length);
+            showLoading(`Affichage de ${allFestivals.length} festivals sur la carte...`);
             
             // Affichage des festivals sur la carte
             map.displayFestivals(allFestivals);
@@ -45,10 +74,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // Remplissage des filtres
             populateFilters(allFestivals);
             
-            console.log(`${allFestivals.length} festivals chargés`);
+            console.log(`${allFestivals.length} festivals chargés en ${loadTime} secondes`);
+            
+            // Masquage de l'indicateur de chargement
+            hideLoading();
         } catch (error) {
             console.error('Erreur lors du chargement des festivals:', error);
             festivalsContainer.innerHTML = '<p>Erreur lors du chargement des festivals. Veuillez réessayer.</p>';
+            hideLoading();
         }
     }
     
@@ -118,6 +151,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Fonction pour appliquer les filtres
     function applyFilters() {
+        // Affichage de l'indicateur de chargement
+        showLoading('Application des filtres...');
+        
         const searchTerm = searchInput.value.toLowerCase().trim();
         const region = regionFilter.value;
         const departement = departementFilter.value;
@@ -154,6 +190,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Mise à jour de la carte et de la liste
         map.displayFestivals(filteredFestivals);
         displayFestivalsList(filteredFestivals);
+        
+        // Masquage de l'indicateur de chargement
+        hideLoading();
     }
     
     // Fonction pour afficher les détails d'un festival
@@ -229,6 +268,12 @@ document.addEventListener('DOMContentLoaded', () => {
             overlay.remove();
         }
     }
+    
+    // Fonction pour rechercher un festival spécifique par nom
+    window.searchFestival = function(name) {
+        searchInput.value = name;
+        applyFilters();
+    };
     
     // Événements
     searchButton.addEventListener('click', applyFilters);
