@@ -98,22 +98,13 @@ class FestivalsMap {
     createMarker(festival) {
         let latLng = null;
         
-        // Vérification des coordonnées dans fields.coordonnees_geo
-        if (festival.fields && festival.fields.coordonnees_geo && 
-            Array.isArray(festival.fields.coordonnees_geo) && 
-            festival.fields.coordonnees_geo.length === 2) {
-            const coords = festival.fields.coordonnees_geo;
-            latLng = [coords[0], coords[1]];
-            console.log("Coordonnées trouvées dans fields.coordonnees_geo:", latLng);
-        } 
-        // Vérification des coordonnées dans geometry.coordinates
-        else if (festival.geometry && festival.geometry.coordinates && 
-                Array.isArray(festival.geometry.coordinates) && 
-                festival.geometry.coordinates.length === 2) {
-            const coords = festival.geometry.coordinates;
-            // Les coordonnées dans geometry sont au format [longitude, latitude]
-            latLng = [coords[1], coords[0]];
-            console.log("Coordonnées trouvées dans geometry.coordinates:", latLng);
+        // Vérification des coordonnées dans le champ ACF geolocalisation
+        if (festival.geolocalisation && 
+            typeof festival.geolocalisation === 'object' && 
+            festival.geolocalisation.lat && 
+            festival.geolocalisation.lng) {
+            latLng = [festival.geolocalisation.lat, festival.geolocalisation.lng];
+            console.log("Coordonnées trouvées dans ACF geolocalisation:", latLng);
         } 
         // Aucune coordonnée valide trouvée
         else {
@@ -162,11 +153,6 @@ class FestivalsMap {
         const popupContent = this.createPopupContent(festival);
         marker.bindPopup(popupContent);
         
-        // Ajout d'un événement au clic sur le marqueur
-        marker.on('click', (e) => {
-            this.onMarkerClick(e.target.festivalData);
-        });
-        
         return marker;
     }
 
@@ -192,36 +178,21 @@ class FestivalsMap {
      * @returns {String} Contenu HTML de la popup
      */
     createPopupContent(festival) {
-        const fields = festival.fields;
-        
         let content = `<div class="festival-popup">
-            <h3>${fields.nom_du_festival || 'Festival sans nom'}</h3>`;
+            <h3>${festival.title || 'Festival sans nom'}</h3>`;
             
-        if (fields.commune_principale_de_deroulement) {
-            content += `<p><strong>Lieu:</strong> ${fields.commune_principale_de_deroulement}</p>`;
+        if (festival.commune) {
+            content += `<p><strong>Lieu:</strong> ${festival.commune}</p>`;
         }
         
-        if (fields.departement_principal_de_deroulement) {
-            content += `<p><strong>Département:</strong> ${fields.departement_principal_de_deroulement}</p>`;
+        if (festival.adresse_complete) {
+            content += `<p><strong>Adresse:</strong> ${festival.adresse_complete}</p>`;
         }
         
-        if (fields.periode_principale_de_deroulement_du_festival) {
-            content += `<p><strong>Période:</strong> ${fields.periode_principale_de_deroulement_du_festival}</p>`;
-        }
-        
-        content += `<button class="popup-details-btn" onclick="showFestivalDetails('${festival.recordid}')">Voir détails</button>
+        content += `<a href="${festival.permalink}" class="popup-details-btn">Voir détails</a>
         </div>`;
         
         return content;
-    }
-
-    /**
-     * Gère le clic sur un marqueur
-     * @param {Object} festival - Données du festival
-     */
-    onMarkerClick(festival) {
-        // Cette fonction peut être remplacée par une fonction personnalisée
-        console.log('Festival cliqué:', festival);
     }
 
     /**
@@ -298,50 +269,5 @@ class FestivalsMap {
         const filteredFestivals = this.festivals.filter(filterFn);
         this.displayFestivals(filteredFestivals);
         return filteredFestivals;
-    }
-
-    /**
-     * Centre la carte sur un festival spécifique
-     * @param {String} festivalId - ID du festival
-     */
-    focusOnFestival(festivalId) {
-        const festival = this.festivals.find(f => f.recordid === festivalId);
-        
-        if (!festival) {
-            console.warn('Festival non trouvé:', festivalId);
-            return;
-        }
-        
-        let latLng = null;
-        
-        // Vérification des coordonnées dans fields.coordonnees_geo
-        if (festival.fields && festival.fields.coordonnees_geo && 
-            Array.isArray(festival.fields.coordonnees_geo) && 
-            festival.fields.coordonnees_geo.length === 2) {
-            const coords = festival.fields.coordonnees_geo;
-            latLng = [coords[0], coords[1]];
-        } 
-        // Vérification des coordonnées dans geometry.coordinates
-        else if (festival.geometry && festival.geometry.coordinates && 
-                Array.isArray(festival.geometry.coordinates) && 
-                festival.geometry.coordinates.length === 2) {
-            const coords = festival.geometry.coordinates;
-            // Les coordonnées dans geometry sont au format [longitude, latitude]
-            latLng = [coords[1], coords[0]];
-        }
-        
-        if (latLng && this.isValidFrenchCoordinate(latLng[0], latLng[1])) {
-            this.map.setView(latLng, 13);
-            
-            // Recherche du marqueur correspondant
-            const marker = this.markers.find(m => m.festivalData.recordid === festivalId);
-            
-            if (marker) {
-                marker.openPopup();
-            }
-        } else {
-            console.warn('Tentative de centrer sur un festival avec des coordonnées hors de France');
-            this.map.setView(this.mapConfig.center, this.mapConfig.zoom);
-        }
     }
 }

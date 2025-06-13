@@ -20,6 +20,9 @@ define('FESTIVALS_MAP_VERSION', '1.0.0');
 define('FESTIVALS_MAP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('FESTIVALS_MAP_PLUGIN_URL', plugin_dir_url(__FILE__));
 
+// Inclusion des fichiers nécessaires
+require_once FESTIVALS_MAP_PLUGIN_DIR . 'includes/post-types.php';
+
 /**
  * Classe principale du plugin
  */
@@ -59,6 +62,10 @@ class FestivalsMap {
         // Ajout du point de terminaison pour le proxy API
         add_action('wp_ajax_festivals_map_proxy', array($this, 'api_proxy'));
         add_action('wp_ajax_nopriv_festivals_map_proxy', array($this, 'api_proxy'));
+        
+        // Ajout du point de terminaison pour récupérer les données des festivals (CPT)
+        add_action('wp_ajax_get_festivals_data', array($this, 'get_festivals_data'));
+        add_action('wp_ajax_nopriv_get_festivals_data', array($this, 'get_festivals_data'));
     }
     
     /**
@@ -88,6 +95,187 @@ class FestivalsMap {
         $data = json_decode($body);
         
         wp_send_json_success($data);
+    }
+
+    /**
+     * Récupère les données des festivals (CPT) pour la carte
+     */
+    public function get_festivals_data() {
+        // Vérification de sécurité
+        check_ajax_referer('festivals_map_nonce', 'nonce');
+        
+        // Débogage: vérifier si le CPT 'festival' existe
+        $post_types = get_post_types(array(), 'names');
+        error_log('Types de posts disponibles: ' . print_r($post_types, true));
+        
+        // Si le CPT 'festival' n'existe pas, créons un festival de test
+        if (!in_array('festival', $post_types)) {
+            error_log('Le CPT festival n\'existe pas encore. Essayons de le créer manuellement.');
+            
+            // Forcer l'enregistrement du CPT
+            if (function_exists('festivals_map_register_post_types')) {
+                festivals_map_register_post_types();
+                error_log('CPT festival enregistré manuellement.');
+            }
+        }
+        
+        // Vérifier s'il y a des festivals
+        $count_posts = wp_count_posts('festival');
+        error_log('Nombre total de posts du type festival avant requête: ' . print_r($count_posts, true));
+        
+        // Si aucun festival n'existe, créons-en un pour le test
+        if (isset($count_posts->publish) && $count_posts->publish == 0) {
+            error_log('Aucun festival publié trouvé. Création d\'un festival de test.');
+            
+            // Créer un festival de test
+            $festival_test_id = wp_insert_post(array(
+                'post_title'    => 'Festival de Test',
+                'post_content'  => 'Ceci est un festival de test créé automatiquement.',
+                'post_status'   => 'publish',
+                'post_type'     => 'festival',
+            ));
+            
+            if (!is_wp_error($festival_test_id)) {
+                error_log('Festival de test créé avec ID: ' . $festival_test_id);
+                
+                // Ajouter les champs ACF
+                if (function_exists('update_field')) {
+                    update_field('geolocalisation', array('lat' => 48.856614, 'lng' => 2.3522219), $festival_test_id);
+                    update_field('adresse_postale', '1 Place de l\'Hôtel de Ville, 75004 Paris', $festival_test_id);
+                    update_field('commune', 'Paris', $festival_test_id);
+                    error_log('Champs ACF ajoutés au festival de test.');
+                } else {
+                    error_log('La fonction update_field n\'existe pas. ACF n\'est peut-être pas activé.');
+                }
+            } else {
+                error_log('Erreur lors de la création du festival de test: ' . $festival_test_id->get_error_message());
+            }
+        }
+        
+        $args = array(
+            'post_type'      => 'festival',
+            'post_status'    => 'publish',
+            'posts_per_page' => -1, // Récupérer tous les festivals
+        );
+        
+        // Ajout de la recherche si spécifiée
+        if (!empty($_GET['search'])) {
+            $args['s'] = sanitize_text_field($_GET['search']);
+        }
+        
+        // Ajout des filtres ACF si nécessaire
+        $meta_query = array();
+        
+        // Exemple: filtre par commune
+        if (!empty($_GET['commune'])) {
+            $meta_query[] = array(
+                'key'     => 'commune',
+                'value'   => sanitize_text_field($_GET['commune']),
+                'compare' => '='
+            );
+        }
+        
+        // Ajout de la meta_query si des filtres ont été définis
+        if (!empty($meta_query)) {
+            $args['meta_query'] = $meta_query;
+        }
+        
+        // Débogage: afficher les arguments de la requête
+        error_log('Arguments de la requête WP_Query: ' . print_r($args, true));
+        
+        // Exécution de la requête
+        $query = new WP_Query($args);
+        
+        // Débogage: afficher le nombre de posts trouvés
+        error_log('Nombre de festivals trouvés: ' . $query->post_count);
+        error_log('Requête SQL: ' . $query->request);
+        
+        // Débogage: vérifier si le CPT 'festival' a des posts
+        $count_posts = wp_count_posts('festival');
+        error_log('Nombre total de posts du type festival après requête: ' . print_r($count_posts, true));
+        
+        $festivals = array();
+        
+        if ($query->have_posts()) {
+            while ($query->have_posts()) {
+                $query->the_post();
+                $post_id = get_the_ID();
+                
+                // Récupération des champs ACF avec les noms exacts
+                $geolocalisation = get_field('geolocalisation', $post_id);
+                $adresse_postale = get_field('adresse_postale', $post_id);
+                $commune = get_field('commune', $post_id);
+                
+                // Débogage: afficher les valeurs des champs ACF
+                error_log('Festival ID: ' . $post_id);
+                error_log('Titre: ' . get_the_title());
+                error_log('Geolocalisation brute: ' . print_r($geolocalisation, true));
+                error_log('Adresse: ' . $adresse_postale);
+                error_log('Commune: ' . $commune);
+                
+                // Traitement du champ geolocalisation pour assurer le bon format
+                $geo_formatted = array();
+                
+                // Si c'est déjà un tableau avec lat/lng
+                if (is_array($geolocalisation) && isset($geolocalisation['lat']) && isset($geolocalisation['lng'])) {
+                    $geo_formatted = $geolocalisation;
+                }
+                // Si c'est une chaîne de caractères au format "lat, lng"
+                else if (is_string($geolocalisation) && !empty($geolocalisation)) {
+                    $coords = explode(',', $geolocalisation);
+                    if (count($coords) >= 2) {
+                        $geo_formatted = array(
+                            'lat' => floatval(trim($coords[0])),
+                            'lng' => floatval(trim($coords[1]))
+                        );
+                    }
+                }
+                // Si c'est un tableau numérique [lat, lng]
+                else if (is_array($geolocalisation) && count($geolocalisation) >= 2 && is_numeric($geolocalisation[0]) && is_numeric($geolocalisation[1])) {
+                    $geo_formatted = array(
+                        'lat' => floatval($geolocalisation[0]),
+                        'lng' => floatval($geolocalisation[1])
+                    );
+                }
+                
+                error_log('Geolocalisation formatée: ' . print_r($geo_formatted, true));
+                
+                // Création du tableau de données du festival
+                $festival = array(
+                    'id'               => $post_id,
+                    'title'            => get_the_title(),
+                    'permalink'        => get_permalink(),
+                    'geolocalisation'  => $geo_formatted,
+                    'adresse_complete' => $adresse_postale, // On conserve le nom adresse_complete pour la compatibilité avec le JS
+                    'commune'          => $commune
+                );
+                
+                $festivals[] = $festival;
+            }
+            
+            wp_reset_postdata();
+        } else {
+            error_log('Aucun festival trouvé dans la requête WP_Query.');
+        }
+        
+        // Débogage: afficher le nombre de festivals après traitement
+        error_log('Nombre de festivals après traitement: ' . count($festivals));
+        
+        // Si aucun festival n'a été trouvé, créons un festival factice pour le test
+        if (empty($festivals)) {
+            error_log('Aucun festival trouvé. Création d\'un festival factice pour le test.');
+            
+            $festivals[] = array(
+                'id'               => 0,
+                'title'            => 'Festival de Test (Factice)',
+                'permalink'        => '#',
+                'geolocalisation'  => array('lat' => 48.856614, 'lng' => 2.3522219),
+                'adresse_complete' => '1 Place de l\'Hôtel de Ville, 75004 Paris',
+                'commune'          => 'Paris'
+            );
+        }
+        
+        wp_send_json_success($festivals);
     }
 
     /**
@@ -172,8 +360,11 @@ class FestivalsMap {
             true
         );
         
-        // Ajout du nonce pour la sécurité des appels AJAX
-        wp_localize_script('festivals-map-api', 'festivals_map_nonce', wp_create_nonce('festivals_map_nonce'));
+        // Définir la variable ajaxurl pour le front-end
+        wp_localize_script('festivals-map-api', 'festivals_map_vars', array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('festivals_map_nonce')
+        ));
     }
 
     /**
@@ -185,9 +376,7 @@ class FestivalsMap {
             array(
                 'height' => '500px',
                 'width' => '100%',
-                'max_festivals' => '8000',
                 'show_filters' => 'true',
-                'show_list' => 'true',
             ),
             $atts,
             'festivals_map'
@@ -195,9 +384,7 @@ class FestivalsMap {
 
         // Passage des attributs au script JS
         wp_localize_script('festivals-map-app', 'festivalsMapOptions', array(
-            'maxFestivals' => intval($atts['max_festivals']),
             'showFilters' => $atts['show_filters'] === 'true',
-            'showList' => $atts['show_list'] === 'true',
         ));
 
         // Début de la mise en mémoire tampon
@@ -211,6 +398,14 @@ class FestivalsMap {
         echo '</div>';
 
         echo '<div class="festivals-map-container">';
+        
+        // Carte et filtres côte à côte
+        echo '<div class="map-and-filters-container">';
+        
+        // Carte
+        echo '<div class="map-container" style="height: ' . esc_attr($atts['height']) . '; width: ' . esc_attr($atts['width']) . ';">';
+        echo '<div id="festivals-map" style="height: 100%; width: 100%;"></div>';
+        echo '</div>';
         
         // Filtres (conditionnels)
         if ($atts['show_filters'] === 'true') {
@@ -255,24 +450,7 @@ class FestivalsMap {
             echo '</div>';
         }
         
-        // Carte
-        echo '<div class="map-container" style="height: ' . esc_attr($atts['height']) . '; width: ' . esc_attr($atts['width']) . ';">';
-        echo '<div id="festivals-map" style="height: 100%; width: 100%;"></div>';
-        echo '</div>';
-        
-        // Liste des festivals (conditionnelle)
-        if ($atts['show_list'] === 'true') {
-            echo '<div class="festival-list">';
-            echo '<h2>Liste des festivals</h2>';
-            echo '<div id="festivals-container"></div>';
-            echo '</div>';
-        }
-        
-        // Détails du festival
-        echo '<div class="festival-details" id="festival-details">';
-        echo '<button class="close-button" id="close-details">×</button>';
-        echo '<div id="festival-details-content"></div>';
-        echo '</div>';
+        echo '</div>'; // Fin du conteneur map-and-filters
         
         echo '</div>'; // Fin du conteneur principal
 

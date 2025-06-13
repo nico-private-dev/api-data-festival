@@ -1,94 +1,77 @@
 /**
- * Module de gestion des appels à l'API des festivals
+ * Module de gestion des appels à l'API WordPress pour les festivals
  */
 class FestivalsAPI {
     constructor(config) {
-        this.baseUrl = config.api.baseUrl;
-        this.dataset = config.api.dataset;
-        this.defaultParams = config.api.defaultParams;
+        this.config = config;
+        
+        // Débogage - Vérifier que les variables sont définies
+        console.log("Initialisation de FestivalsAPI");
+        console.log("festivals_map_vars défini:", typeof festivals_map_vars !== 'undefined');
+        if (typeof festivals_map_vars !== 'undefined') {
+            console.log("ajaxurl:", festivals_map_vars.ajaxurl);
+            console.log("nonce:", festivals_map_vars.nonce);
+        }
     }
 
     /**
-     * Construit l'URL de l'API avec les paramètres
-     * @param {Object} params - Paramètres additionnels pour la requête
-     * @returns {String} URL complète pour la requête API
-     */
-    buildUrl(params = {}) {
-        // URL de base avec le dataset
-        let url = `${this.baseUrl}?dataset=${this.dataset}`;
-        
-        // Ajout du nombre de résultats
-        if (params.rows || this.defaultParams.rows) {
-            url += `&rows=${params.rows || this.defaultParams.rows}`;
-        }
-        
-        // Ajout du paramètre de départ (pour la pagination)
-        if (params.start) {
-            url += `&start=${params.start}`;
-        }
-        
-        // Ajout des filtres de discipline dominante
-        if (this.defaultParams.refine && this.defaultParams.refine.discipline_dominante) {
-            url += `&refine.discipline_dominante=${encodeURIComponent(this.defaultParams.refine.discipline_dominante)}`;
-        }
-        
-        // Ajout des filtres supplémentaires
-        if (params.filters) {
-            Object.entries(params.filters).forEach(([key, value]) => {
-                if (value) {
-                    url += `&refine.${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-                }
-            });
-        }
-        
-        // Ajout d'un terme de recherche
-        if (params.query) {
-            url += `&q=${encodeURIComponent(params.query)}`;
-        }
-        
-        return url;
-    }
-
-    /**
-     * Récupère les festivals depuis l'API
+     * Récupère les festivals depuis WordPress (CPT festivals)
      * @param {Object} params - Paramètres pour la requête
      * @returns {Promise} Promise contenant les données des festivals
      */
     async getFestivals(params = {}) {
         try {
-            // Utiliser l'URL directe de l'API ou le proxy WordPress si disponible
-            const directApiUrl = this.buildUrl(params);
+            // Vérifier si nous sommes dans WordPress (variable festivals_map_vars définie)
+            if (typeof festivals_map_vars === 'undefined') {
+                console.error("Variable festivals_map_vars non définie. Ce script doit être exécuté dans WordPress.");
+                return { records: [] };
+            }
+
+            console.log("Récupération des festivals depuis WordPress (CPT)");
             
-            // Vérifier si nous sommes dans WordPress (variable ajaxurl définie)
-            if (typeof ajaxurl !== 'undefined') {
-                console.log("Utilisation du proxy WordPress pour l'appel API");
-                
-                // Créer l'URL du proxy WordPress
-                const proxyUrl = `${ajaxurl}?action=festivals_map_proxy&nonce=${festivals_map_nonce}&url=${encodeURIComponent(directApiUrl)}`;
-                
-                const response = await fetch(proxyUrl);
-                
-                if (!response.ok) {
-                    throw new Error(`Erreur HTTP: ${response.status}`);
-                }
-                
-                const result = await response.json();
-                
-                if (result.success && result.data) {
-                    return result.data;
-                } else {
-                    throw new Error('Erreur dans la réponse du proxy: ' + (result.data || 'Erreur inconnue'));
-                }
+            // Créer l'URL pour récupérer les festivals depuis WordPress
+            const proxyUrl = `${festivals_map_vars.ajaxurl}?action=get_festivals_data&nonce=${festivals_map_vars.nonce}`;
+            console.log("URL de l'API:", proxyUrl);
+            
+            // Ajout des paramètres de filtrage si nécessaires
+            const searchParams = new URLSearchParams();
+            
+            if (params.query) {
+                searchParams.append('search', params.query);
+            }
+            
+            if (params.filters) {
+                Object.entries(params.filters).forEach(([key, value]) => {
+                    if (value) {
+                        searchParams.append(key, value);
+                    }
+                });
+            }
+            
+            // Ajout des paramètres à l'URL
+            const finalUrl = searchParams.toString() 
+                ? `${proxyUrl}&${searchParams.toString()}` 
+                : proxyUrl;
+            
+            console.log("URL finale de l'API:", finalUrl);
+            
+            const response = await fetch(finalUrl);
+            
+            if (!response.ok) {
+                throw new Error(`Erreur HTTP: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log("Réponse brute de l'API:", result);
+            
+            if (result.success) {
+                // Transformation des données pour qu'elles soient compatibles avec le format attendu
+                return {
+                    nhits: result.data.length,
+                    records: result.data
+                };
             } else {
-                // Appel direct à l'API (pour les tests locaux)
-                console.log("Appel direct à l'API (pas de proxy WordPress)");
-                const response = await fetch(directApiUrl);
-                
-                if (!response.ok) {
-                    throw new Error(`Erreur HTTP: ${response.status}`);
-                }
-                
-                return await response.json();
+                throw new Error('Erreur dans la réponse: ' + (result.message || 'Erreur inconnue'));
             }
         } catch (error) {
             console.error('Erreur lors de la récupération des festivals:', error);
@@ -97,41 +80,13 @@ class FestivalsAPI {
     }
 
     /**
-     * Récupère tous les festivals avec pagination
+     * Récupère tous les festivals
      * @param {Object} params - Paramètres pour la requête
      * @returns {Promise} Promise contenant tous les festivals
      */
     async getAllFestivals(params = {}) {
-        try {
-            // Première requête pour obtenir le nombre total de festivals
-            const initialData = await this.getFestivals({ ...params, rows: 1 });
-            const totalCount = initialData.nhits;
-            const rowsPerRequest = params.rows || this.defaultParams.rows || 100;
-            const requests = [];
-            
-            // Calcul du nombre de requêtes nécessaires
-            const requestCount = Math.ceil(totalCount / rowsPerRequest);
-            
-            // Création des requêtes pour chaque page
-            for (let i = 0; i < requestCount; i++) {
-                const start = i * rowsPerRequest;
-                requests.push(this.getFestivals({ ...params, start, rows: rowsPerRequest }));
-            }
-            
-            // Exécution de toutes les requêtes en parallèle
-            const results = await Promise.all(requests);
-            
-            // Fusion des résultats
-            const allRecords = results.flatMap(result => result.records || []);
-            
-            return {
-                nhits: totalCount,
-                records: allRecords
-            };
-        } catch (error) {
-            console.error('Erreur lors de la récupération de tous les festivals:', error);
-            throw error;
-        }
+        // Avec le CPT, nous n'avons pas besoin de pagination car WordPress gère déjà cela
+        return this.getFestivals(params);
     }
 
     /**
@@ -142,8 +97,8 @@ class FestivalsAPI {
      */
     extractUniqueValues(records, fieldName) {
         const values = records
-            .map(record => record.fields && record.fields[fieldName])
-            .filter(value => value !== undefined && value !== null);
+            .map(record => record[fieldName])
+            .filter(value => value !== undefined && value !== null && value !== '');
         
         return [...new Set(values)].sort();
     }
