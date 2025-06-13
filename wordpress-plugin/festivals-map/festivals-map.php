@@ -205,6 +205,10 @@ class FestivalsMap {
                 $geolocalisation = get_field('geolocalisation', $post_id);
                 $adresse_postale = get_field('adresse_postale', $post_id);
                 $commune = get_field('commune', $post_id);
+                $region = get_field('region', $post_id);
+                $departement = get_field('departement', $post_id);
+                $sous_categorie_musique = get_field('sous_categorie_musique', $post_id);
+                $periode_principale = get_field('periode_principale', $post_id);
                 
                 // Débogage: afficher les valeurs des champs ACF
                 error_log('Festival ID: ' . $post_id);
@@ -212,6 +216,10 @@ class FestivalsMap {
                 error_log('Geolocalisation brute: ' . print_r($geolocalisation, true));
                 error_log('Adresse: ' . $adresse_postale);
                 error_log('Commune: ' . $commune);
+                error_log('Région: ' . $region);
+                error_log('Département: ' . $departement);
+                error_log('Genre musical: ' . $sous_categorie_musique);
+                error_log('Période: ' . $periode_principale);
                 
                 // Traitement du champ geolocalisation pour assurer le bon format
                 $geo_formatted = array();
@@ -247,7 +255,11 @@ class FestivalsMap {
                     'permalink'        => get_permalink(),
                     'geolocalisation'  => $geo_formatted,
                     'adresse_complete' => $adresse_postale, // On conserve le nom adresse_complete pour la compatibilité avec le JS
-                    'commune'          => $commune
+                    'commune'          => $commune,
+                    'region'          => $region,
+                    'departement'     => $departement,
+                    'sous_categorie_musique' => $sous_categorie_musique,
+                    'periode_principale' => $periode_principale
                 );
                 
                 $festivals[] = $festival;
@@ -271,7 +283,11 @@ class FestivalsMap {
                 'permalink'        => '#',
                 'geolocalisation'  => array('lat' => 48.856614, 'lng' => 2.3522219),
                 'adresse_complete' => '1 Place de l\'Hôtel de Ville, 75004 Paris',
-                'commune'          => 'Paris'
+                'commune'          => 'Paris',
+                'region'          => 'Île-de-France',
+                'departement'     => 'Paris',
+                'sous_categorie_musique' => 'Rock',
+                'periode_principale' => 'Saison (21 juin - 5 septembre)'
             );
         }
         
@@ -427,6 +443,13 @@ class FestivalsMap {
             echo '<label for="departement-filter">Département:</label>';
             echo '<select id="departement-filter">';
             echo '<option value="">Tous les départements</option>';
+            echo '</select>';
+            echo '</div>';
+            
+            echo '<div class="filter-group">';
+            echo '<label for="ville-filter">Ville:</label>';
+            echo '<select id="ville-filter">';
+            echo '<option value="">Toutes les villes</option>';
             echo '</select>';
             echo '</div>';
             

@@ -179,18 +179,54 @@ class FestivalsMap {
      */
     createPopupContent(festival) {
         let content = `<div class="festival-popup">
-            <h3>${festival.title || 'Festival sans nom'}</h3>`;
+            <h3 class="festival-popup-title">${festival.title || 'Festival sans nom'}</h3>`;
             
+        // Ajout des informations supplémentaires dans une section info
+        content += `<div class="festival-popup-info">`;
+        
         if (festival.commune) {
-            content += `<p><strong>Lieu:</strong> ${festival.commune}</p>`;
+            content += `<div class="info-item">
+                <i class="info-icon location-icon"></i>
+                <span>${festival.commune}</span>
+            </div>`;
+        }
+        
+        if (festival.departement && festival.region) {
+            content += `<div class="info-item">
+                <i class="info-icon region-icon"></i>
+                <span>${festival.departement}, ${festival.region}</span>
+            </div>`;
         }
         
         if (festival.adresse_complete) {
-            content += `<p><strong>Adresse:</strong> ${festival.adresse_complete}</p>`;
+            content += `<div class="info-item">
+                <i class="info-icon address-icon"></i>
+                <span>${festival.adresse_complete}</span>
+            </div>`;
         }
         
-        content += `<a href="${festival.permalink}" class="popup-details-btn">Voir détails</a>
+        if (festival.sous_categorie_musique) {
+            content += `<div class="info-item">
+                <i class="info-icon music-icon"></i>
+                <span>${festival.sous_categorie_musique}</span>
+            </div>`;
+        }
+        
+        if (festival.periode_principale) {
+            content += `<div class="info-item">
+                <i class="info-icon calendar-icon"></i>
+                <span>${festival.periode_principale}</span>
+            </div>`;
+        }
+        
+        content += `</div>`;
+        
+        // Ajout du bouton de détails
+        content += `<div class="festival-popup-footer">
+            <a href="${festival.permalink}" class="popup-details-btn">Voir détails</a>
         </div>`;
+        
+        content += `</div>`;
         
         return content;
     }

@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchButton = document.getElementById('search-button');
     const regionFilter = document.getElementById('region-filter');
     const departementFilter = document.getElementById('departement-filter');
+    const villeFilter = document.getElementById('ville-filter');
     const genreFilter = document.getElementById('genre-filter');
     const periodFilter = document.getElementById('period-filter');
     const loadingIndicator = document.getElementById('loading-indicator');
@@ -112,21 +113,72 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Fonction pour remplir les filtres avec les valeurs disponibles
         function populateFilters(festivals) {
-            // Extraction des valeurs uniques pour chaque filtre
-            // Note: Adaptez ces champs en fonction de vos ACF disponibles
-            const communes = api.extractUniqueValues(festivals, 'commune');
+            // Extraction des valeurs uniques pour chaque filtre en utilisant les bons champs ACF
+            const regions = api.extractUniqueValues(festivals, 'region');
+            const departements = api.extractUniqueValues(festivals, 'departement');
+            const villes = api.extractUniqueValues(festivals, 'commune');
+            const genresMusicaux = api.extractUniqueValues(festivals, 'sous_categorie_musique');
+            const periodes = api.extractUniqueValues(festivals, 'periode_principale');
             
-            // Remplissage du filtre de région (remplacé par communes)
-            communes.forEach(commune => {
-                if (commune) {
+            console.log("Valeurs de région trouvées:", regions);
+            console.log("Valeurs de département trouvées:", departements);
+            console.log("Valeurs de ville trouvées:", villes);
+            console.log("Valeurs de genre musical trouvées:", genresMusicaux);
+            console.log("Valeurs de période trouvées:", periodes);
+            
+            // Remplissage du filtre de région
+            regions.forEach(region => {
+                if (region) {
                     const option = document.createElement('option');
-                    option.value = commune;
-                    option.textContent = commune;
+                    option.value = region;
+                    option.textContent = region;
                     regionFilter.appendChild(option);
                 }
             });
             
-            // Note: Vous pouvez ajouter d'autres filtres si vous avez des ACF correspondants
+            // Remplissage du filtre de département
+            departements.forEach(departement => {
+                if (departement) {
+                    const option = document.createElement('option');
+                    option.value = departement;
+                    option.textContent = departement;
+                    departementFilter.appendChild(option);
+                }
+            });
+            
+            // Remplissage du filtre de ville
+            villes.forEach(ville => {
+                if (ville) {
+                    const option = document.createElement('option');
+                    option.value = ville;
+                    option.textContent = ville;
+                    villeFilter.appendChild(option);
+                }
+            });
+            
+            // Remplissage du filtre de genre musical
+            genresMusicaux.forEach(genre => {
+                if (genre) {
+                    const option = document.createElement('option');
+                    option.value = genre;
+                    option.textContent = genre;
+                    genreFilter.appendChild(option);
+                }
+            });
+            
+            // Remplissage du filtre de période
+            // On garde les options statiques définies dans le HTML pour les périodes
+            // mais on ajoute aussi les valeurs dynamiques si elles sont différentes
+            const existingPeriodes = Array.from(periodFilter.options).map(opt => opt.value);
+            
+            periodes.forEach(periode => {
+                if (periode && !existingPeriodes.includes(periode)) {
+                    const option = document.createElement('option');
+                    option.value = periode;
+                    option.textContent = periode;
+                    periodFilter.appendChild(option);
+                }
+            });
         }
         
         // Fonction pour appliquer les filtres
@@ -135,7 +187,11 @@ document.addEventListener('DOMContentLoaded', () => {
             showLoading('Application des filtres...');
             
             const searchTerm = searchInput.value.toLowerCase().trim();
-            const commune = regionFilter.value; // On utilise le filtre région pour les communes
+            const region = regionFilter.value;
+            const departement = departementFilter.value;
+            const ville = villeFilter.value;
+            const genre = genreFilter.value;
+            const periode = periodFilter.value;
             
             filteredFestivals = allFestivals.filter(festival => {
                 // Filtre par terme de recherche
@@ -143,12 +199,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     (festival.title && festival.title.toLowerCase().includes(searchTerm)) ||
                     (festival.commune && festival.commune.toLowerCase().includes(searchTerm));
                 
-                // Filtre par commune
-                const matchesCommune = !commune || 
-                    (festival.commune === commune);
+                // Filtre par région
+                const matchesRegion = !region || 
+                    (festival.region === region);
                 
-                return matchesSearch && matchesCommune;
+                // Filtre par département
+                const matchesDepartement = !departement || 
+                    (festival.departement === departement);
+                
+                // Filtre par ville
+                const matchesVille = !ville || 
+                    (festival.commune === ville);
+                
+                // Filtre par genre musical
+                const matchesGenre = !genre || 
+                    (festival.sous_categorie_musique === genre);
+                
+                // Filtre par période
+                const matchesPeriode = !periode || 
+                    (festival.periode_principale === periode);
+                
+                return matchesSearch && matchesRegion && matchesDepartement && matchesVille && matchesGenre && matchesPeriode;
             });
+            
+            console.log(`Filtres appliqués: ${filteredFestivals.length} festivals correspondent aux critères`);
             
             // Mise à jour de la carte
             map.displayFestivals(filteredFestivals);
@@ -167,6 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         regionFilter.addEventListener('change', applyFilters);
         departementFilter.addEventListener('change', applyFilters);
+        villeFilter.addEventListener('change', applyFilters);
         genreFilter.addEventListener('change', applyFilters);
         periodFilter.addEventListener('change', applyFilters);
         
